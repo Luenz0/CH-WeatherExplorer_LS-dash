@@ -400,7 +400,7 @@ def plot_monthly_TAir(df, summary):
 
 # Dash app setup
 app = dash.Dash(__name__)
-server = app.server(debug = True, port = 8071)
+server = app.server
 
 app.layout = html.Div([
     
