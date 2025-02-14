@@ -1,5 +1,6 @@
-gunicorn
-numpy==1.23.5
+dash==2.14.1
+matplotlib==3.7.0
 pandas==1.5.3
 plotly==5.9.0
+gunicorn
 dash-tools
