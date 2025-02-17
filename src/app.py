@@ -3,7 +3,8 @@
 # v2 - 12-02-25, better format, IDAICE plots (JAN, JUN, AUG, OCT) 
 # v3 - 13/02/25, new layout
 # v4 - 13-02-25, ready for deploy - problems with deploy
-# v5 - 14-02-25, let´s add an option to change plot styles. 
+# v5 - 14-02-25, line and box plot for temp
+# v6 - 17/02/25, test buttom.  
 
 
 ## TO DO:
@@ -17,7 +18,7 @@ import pandas as pd
 import numpy as np
 import dash
 from dash import dcc, html, dash_table
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
@@ -408,6 +409,8 @@ def plot_monthly_TAir(df, summary):
                                 value_name="Temperature (°C)")
         
         date_range_label = f"{start_evaluation.strftime('%d-%b')} to {critical_day.strftime('%d-%b')}"
+        # Add "*" to the title if it's December
+        title_suffix = " *" if start_evaluation.month == 12 else ""
 
 
         # Define legend labels
@@ -426,7 +429,7 @@ def plot_monthly_TAir(df, summary):
             x="Timestamp", 
             y="Temperature (°C)", 
             color="Metric",  # Assign colors based on temperature type
-            title=f'Period for {month}: {date_range_label}',
+            title=f'Period for {month}: {date_range_label}{title_suffix}',
             labels={"Timestamp": "Time", "Metric": "Temperature Type"}
         )
 
@@ -470,6 +473,7 @@ app.layout = html.Div([
     
     # General Title
     html.H1("Weather File Explorer", style={'textAlign': 'center', 'margin-bottom': '20px'}),
+    html.H3(id='selected-file', style={'textAlign': 'center', 'margin-bottom': '20px'}),html.Br(),
 
     # Page Layout
     html.Div([
@@ -477,6 +481,7 @@ app.layout = html.Div([
         # First Section / input and tables
         html.Div([
             html.H2("Weather File", style={'textAlign': 'center', 'margin-bottom': '10px'}),html.Hr(),
+            
             # Dropdown menu
             html.Label("Station:"),
             dcc.Dropdown(
@@ -499,8 +504,27 @@ app.layout = html.Div([
                         'gap': '10px'  # Adds space between each radio item
                     }
             ),
-            html.Br(),html.Hr(),html.Hr(),html.Br(),
-            html.H3(id='selected-file'),html.Br(),
+            html.Br(),#html.Hr(),html.Hr(),html.Br(),
+            html.Button(
+                'Update', 
+                id='update-button', 
+                n_clicks=0, 
+                style={
+                    'margin-top': '10px',
+                    'backgroundColor': '#007BFF',  # Blue color
+                    'color': 'white',  # White text
+                    'border': 'none',  # No border
+                    'padding': '10px 20px',  # Padding for size
+                    'borderRadius': '5px',  # Rounded corners
+                    'fontSize': '16px',  # Font size
+                    'cursor': 'pointer',  # Pointer cursor on hover
+                    'transition': 'background-color 0.3s ease',  # Smooth transition
+                },
+                # Hover effect added using CSS in the Dash app's external stylesheet or inline
+            ),
+            dcc.Store(id='weather-data-store'),html.Br(),
+            html.Br(),
+            #html.H3(id='selected-file'),html.Br(),
             html.Hr(),
 
             html.Div(id='yearly-summary', 
@@ -511,7 +535,7 @@ app.layout = html.Div([
                          'borderRadius': '5px',
                          'lineHeight': '2',
                          'textAlign': 'center',
-                         'backgroundColor': '#f2f2f2',
+                         'backgroundColor': '#b8d3e0',
                          }),
             html.Hr(),
 
@@ -643,7 +667,9 @@ app.layout = html.Div([
                     "TAir = Outdoor temperature", html.Br(),
                     "MAT = Moving Average temperature (96h)", html.Br(),
                     "DAT = Daily Average temperature", html.Br(),
-                    "4D-MAT = Moving Average temperature (4D)"
+                    "4D-MAT = Moving Average temperature (4D)", html.Br(),
+                    "-----------------------------------", html.Br(),
+                    " * Using 2023 values for December"
                 ], style={'fontSize': '14px'})
             ], style={'width': '30%', 'textAlign': 'left'}),
 
@@ -653,9 +679,21 @@ app.layout = html.Div([
             # Right Section: Footnotes
             
             html.Div([
-                html.P("Author: Luis E. Sanchez-Vazquez", style={'margin': '5px', 'fontSize': '14px'}),
+                
                 html.P("Version: 1.0", style={'margin': '5px', 'fontSize': '14px'}),
                 html.P("Last Updated: February 2025", style={'margin': '5px', 'fontSize': '14px'}),
+                
+                html.P("Luis Enrique Sanchez Vazquez", 
+                           style={
+                            'margin': '5px', 
+                            'fontSize': '20px', 
+                            'fontFamily': 'Montserrat, sans-serif', 
+                            'fontWeight': '600', 
+                            'letterSpacing': '1px', 
+                            'color': '#333',  # Dark gray for a softer look
+                            'textAlign': 'right',
+                        }
+                    ),
                 html.P("Contact: your.email@example.com", style={'margin': '5px', 'fontSize': '14px'}),
                 html.P("References:", style={'marginTop': '10px', 'fontSize': '14px', 'fontWeight': 'bold'}),
                 html.A(
@@ -698,18 +736,36 @@ app.layout = html.Div([
         Output('graph-3', 'figure'),
         Output('graph-4', 'figure'),
         Output('graph-5', 'figure'),
-        Output('graph-6', 'figure')
+        Output('graph-6', 'figure'),
+       # Output('selected-file-title')
     ],
+    Input('update-button', 'n_clicks'),  # Button triggers update
     [
-        Input('scenario-selector', 'value'),
-        Input('station-selector', 'value'),
-        Input('temperature-plot-type', 'value')
+        State('scenario-selector', 'value'),
+        State('station-selector', 'value'),
+        State('temperature-plot-type', 'value')
     ]
 )
 
 ######################
 #### Functions for   #####
-######################    
+######################  
+def update_weather_callback(n_clicks, scenario, station, plot_type):
+    if n_clicks == 0:
+        #raise dash.exceptions.PreventUpdate  # Prevent update until button is pressed
+        return (
+            "Please select a Station and Scenario to proceed.", 
+            px.scatter(title="Click 'Update' to view the data."),
+            px.scatter(title="Click 'Update' to view the data."),
+            px.scatter(title="Click 'Update' to view the data."),
+            "After selecting a Station and Scenario, click 'Update' to view the data.", [], [], [], [],
+            px.scatter(title="Click 'Update' to view the data."), 
+            px.scatter(title="Click 'Update' to view the data."),
+            px.scatter(title="Click 'Update' to view the data."),
+            px.scatter(title="Click 'Update' to view the data."), 
+            px.scatter(title="Click 'Update' to view the data.")
+        )
+    return update_weather_file(scenario, station, plot_type)  
 
 def update_weather_file(scenario, station, plot_type):
     if not scenario or not station:
