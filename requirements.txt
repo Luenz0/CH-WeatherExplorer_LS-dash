@@ -6,3 +6,4 @@ gunicorn
 dash-tools
 numpy
 datetime
+docopt==0.6.2
