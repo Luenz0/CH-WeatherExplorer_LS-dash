@@ -1,6 +1,9 @@
-dash
+dash==2.6.0
 matplotlib
 pandas
 plotly
 gunicorn
 dash-tools
+numpy
+datetime
+os
