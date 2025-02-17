@@ -17,7 +17,7 @@ import os
 import pandas as pd
 import numpy as np
 import dash
-from dash import dcc, html, dash_table
+from dash import dcc, html, dash_table, Dash
 from dash.dependencies import Input, Output, State
 import plotly.express as px
 import plotly.graph_objects as go
@@ -466,7 +466,7 @@ def plot_monthly_TAir(df, summary):
 ######################
 
 # Dash app setup
-app = dash.Dash(__name__)
+app = Dash(__name__)
 server = app.server
 
 app.layout = html.Div([
