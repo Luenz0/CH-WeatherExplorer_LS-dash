@@ -2,7 +2,8 @@
 # v1 - 11-02-25, First Dash - 3 plots (temp, wind, rad)
 # v2 - 12-02-25, better format, IDAICE plots (JAN, JUN, AUG, OCT) 
 # v3 - 13/02/25, new layout
-# v4 - 13-02-25, ready for deploy
+# v4 - 13-02-25, ready for deploy - problems with deploy
+# v5 - 14-02-25, let´s add an option to change plot styles. 
 
 
 ## TO DO:
@@ -203,20 +204,45 @@ def generate_analysis(df):
 ###########################
 
 # Function to create temperature plot
-def plot_temperature(df):
+def plot_temperature(df, plot_type='line'):
+    df['Month'] = df.index.month
+
+    #print(plot_type)
     fig = go.Figure()
+
     rename_dict = {'TAir': 'TAir', 'moving_avg_temp': 'MAT'}
     
+    # Loop through the columns and add traces
     for col, new_name in rename_dict.items():
         if col in df.columns:
-            fig.add_trace(go.Scatter(x=df.index, y=df[col], mode='lines', name=new_name))
-    
+            if plot_type == 'line':
+                # Create a line plot
+                fig.add_trace(go.Scatter(x=df.index, y=df[col], mode='lines', name=new_name))
+            elif plot_type == 'box' and col == 'TAir':
+                # Create a box plot
+                
+                for month in range(1, 13):  # Loop through each month
+                    month_name = pd.to_datetime(f'2021-{month}-01').strftime('%B')  # Convert to month name
+                    monthly_data = df[df['Month'] == month][col]  # Filter data for the month
+
+                    if not monthly_data.empty:
+                        fig.add_trace(go.Box(
+                            y=monthly_data,
+                            name=month_name,  # Use month name as label
+                            boxmean=True,  # Show mean line
+                            marker_color="#636efa",  # Set box color to light blue
+                            fillcolor="#636efa",  # Optional: Fill color for transparency effect
+                            line=dict(color="blue")  # Optional: Slightly darker blue outline
+                        ))
+
     fig.update_layout(
-        title="Temperature Trends",
-        xaxis_title="Time",
+        title="Temperature Trends" if plot_type == 'line' else "Temperature Distribution",
+        xaxis_title="Time" if plot_type == 'line' else '',
         yaxis_title="Temperature (°C)",
+        showlegend= True if plot_type == 'line' else False,
         legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.2, yanchor="top")  # Moves legend below x-axis
     )
+    
     return fig
 
 # Function to create wind direction plot
@@ -315,7 +341,25 @@ def plot_hum(df):
     return fig
 
 def plot_monthly_TAir(df, summary):
-   # print(df.columns)
+    
+    # Ensure the daily averages are unique and indexed by date
+    daily_tair_avg = df[['Daily TAIR Average']].resample('D').mean()
+
+    # Calculate the rolling average for the last 4 days
+    daily_tair_avg['4-day Avg Daily TAIR'] = daily_tair_avg['Daily TAIR Average'].rolling(window=4, min_periods=1).mean()
+
+    # Add a temporary date column to the original DataFrame
+    df['date'] = df.index.floor('D')
+
+    # Merge the 4-day average back into the original dataframe
+    df = df.merge(daily_tair_avg[['4-day Avg Daily TAIR']], how='left', left_on='date', right_index=True)
+
+    # Drop the temporary date column
+    df.drop(columns=['date'], inplace=True)
+
+    # The new column '4-day Avg Daily TAIR' is now in the original DataFrame
+    #print(df.head())
+
     months_to_plot = ["January", "June", "August", "October"]
     figures = []
 
@@ -353,13 +397,27 @@ def plot_monthly_TAir(df, summary):
             df_filtered = df[(df['Timestamp'] >= start_evaluation) & (df['Timestamp'] <= critical_day + pd.Timedelta(days=1))]
 
         # Reshape data for Plotly Express
+        variables_to_plot = ["TAir", "moving_avg_temp", "Daily TAIR Average"]  # Default variables
+        if month == "January" and "4-day Avg Daily TAIR" in df.columns:
+            variables_to_plot.remove("Daily TAIR Average")
+            variables_to_plot.append("4-day Avg Daily TAIR")  # Add '4daysavg' for January
+
         df_long = df_filtered.melt(id_vars=["Timestamp"], 
-                                   value_vars=["TAir", "moving_avg_temp", "Daily TAIR Average"], 
-                                   var_name="Metric", 
-                                   value_name="Temperature (°C)")
+                                value_vars=variables_to_plot, 
+                                var_name="Metric", 
+                                value_name="Temperature (°C)")
+        
+        date_range_label = f"{start_evaluation.strftime('%d-%b')} to {critical_day.strftime('%d-%b')}"
+
 
         # Define legend labels
-        label_map = {"TAir": "TAir", "moving_avg_temp": "MAT", "Daily TAIR Average": "DAT"}
+        label_map = {
+            "TAir": "TAir", 
+            "moving_avg_temp": "MAT", 
+            "Daily TAIR Average": "DAT",
+            "4-day Avg Daily TAIR": "4D-MAT"  # Add label for 4daysavg
+        }
+
         df_long["Metric"] = df_long["Metric"].map(label_map)
 
         # Create the plot
@@ -368,12 +426,18 @@ def plot_monthly_TAir(df, summary):
             x="Timestamp", 
             y="Temperature (°C)", 
             color="Metric",  # Assign colors based on temperature type
-            title=f'Period for {month}',
+            title=f'Period for {month}: {date_range_label}',
             labels={"Timestamp": "Time", "Metric": "Temperature Type"}
         )
 
         # Improve layout
         fig.update_layout(
+            xaxis_title=None,
+            xaxis=dict(
+                tickformat='%d-%b',  # Format x-axis ticks as (05-JAN)
+                dtick = 'D',
+                tickangle=310,  # Rotate labels for better readability if needed
+            ),
             legend=dict(
                 orientation="h",  # Move legend to the bottom
                 yanchor="top",
@@ -412,7 +476,7 @@ app.layout = html.Div([
         
         # First Section / input and tables
         html.Div([
-            html.H2("Weather File", style={'textAlign': 'center', 'margin-bottom': '10px'}),
+            html.H2("Weather File", style={'textAlign': 'center', 'margin-bottom': '10px'}),html.Hr(),
             # Dropdown menu
             html.Label("Station:"),
             dcc.Dropdown(
@@ -420,7 +484,8 @@ app.layout = html.Div([
                 options=[{'label': row[1], 'value': row[0]} for _, row in Stations.iterrows()] if Stations is not None else [],
                 value=Stations.iloc[0, 0] if Stations is not None else None
             ),
-            html.Hr(),
+            #html.Hr(),
+            html.Br(),
 
             # Check box / Radio items
             html.Label("Scenario:"),
@@ -434,9 +499,8 @@ app.layout = html.Div([
                         'gap': '10px'  # Adds space between each radio item
                     }
             ),
-            html.Hr(),
-
-            html.H3(id='selected-file'),
+            html.Br(),html.Hr(),html.Hr(),html.Br(),
+            html.H3(id='selected-file'),html.Br(),
             html.Hr(),
 
             html.Div(id='yearly-summary', 
@@ -470,7 +534,7 @@ app.layout = html.Div([
                 style_table={'overflowX': 'auto',  'maxWidth': '800px'}),
             html.Hr(),
 
-            html.H3("SIA Parameters:"),
+            html.H3("Simulation Parameters:"),
             dash_table.DataTable(
                 id='analysis-table', 
                 style_table = {'overflowX': 'auto', 'maxWidth': '800px'},
@@ -502,21 +566,21 @@ app.layout = html.Div([
                         'if': {
                             'filter_query': '{Month} = "June"',
                         },
-                        'backgroundColor': '#808fd1',  # Light Blue background for June
+                        'backgroundColor': '#9fa8d1',  # Light Blue background for June
                         'color': 'black',
                     },
                     {
                         'if': {
                             'filter_query': '{Month} = "August"',
                         },
-                        'backgroundColor': '#9fa8d1',  # Light Green background for August
+                        'backgroundColor': '#bccde0',  # Light Green background for August
                         'color': 'black',
                     },
                     {
                         'if': {
                             'filter_query': '{Month} = "October"',
                         },
-                        'backgroundColor': '#808fd1',  # Light Gray background for October
+                        'backgroundColor': '#9fa8d1',  # Light Gray background for October
                         'color': 'black',
                     },
                     {
@@ -535,9 +599,22 @@ app.layout = html.Div([
         # Second Section / diagrmas 1
         html.Div([
             html.H2("Summary", style={'textAlign': 'center', 'margin-bottom': '10px'}),
-            dcc.Graph(id='temperature-plot', style={'maxWidth': '900px', 'margin': '0 auto'}),
-            dcc.Graph(id='graph-2', style={'maxWidth': '900px', 'margin': '0 auto'}),
-            dcc.Graph(id='radiation-plot', style={'maxWidth': '900px', 'margin': '0 auto'}),
+            html.Hr(),
+
+            dcc.RadioItems(
+                id='temperature-plot-type',
+                options=[
+                    {'label': 'Line', 'value': 'line'},
+                    {'label': 'Boxplot', 'value': 'box'}
+                ],
+                value='line',  # Default selection
+                inline=True,  # Display horizontally
+                style={'textAlign': 'left', 'margin-bottom': '10px'}
+            ),
+            dcc.Graph(id='temperature-plot', style={'maxWidth': '900px', 'margin': '0 auto'}),html.Br(),html.Hr(),
+            
+            dcc.Graph(id='graph-2', style={'maxWidth': '900px', 'margin': '0 auto'}),html.Br(),html.Hr(),
+            dcc.Graph(id='radiation-plot', style={'maxWidth': '900px', 'margin': '0 auto'}),html.Br(),html.Hr(),
             dcc.Graph(id='wind-plot', style={'maxWidth': '900px', 'margin': '0 auto'}),
         ], style={'width': '36%', 'display': 'inline-block', 'border': '2px solid #ccc', 'padding': '15px', 'border-radius': '10px',
         'margin-bottom': '20px', 'background-color': '#f9f9f9', 'margin': '0 auto', }),
@@ -546,9 +623,10 @@ app.layout = html.Div([
         html.Div([
             #html.H4("Additional Graphs"),
             html.H2("Periods for Evaluation", style={'textAlign': 'center', 'margin-bottom': '10px'}),
-            dcc.Graph(id='graph-3', style={'maxWidth': '900px', 'margin': '0 auto'}),
-            dcc.Graph(id='graph-4', style={'maxWidth': '900px', 'margin': '0 auto'}),
-            dcc.Graph(id='graph-5', style={'maxWidth': '900px', 'margin': '0 auto'}),
+            html.Hr(),html.Br(),html.Br(),
+            dcc.Graph(id='graph-3', style={'maxWidth': '900px', 'margin': '0 auto'}),html.Br(),html.Hr(),
+            dcc.Graph(id='graph-4', style={'maxWidth': '900px', 'margin': '0 auto'}),html.Br(),html.Hr(),
+            dcc.Graph(id='graph-5', style={'maxWidth': '900px', 'margin': '0 auto'}),html.Br(),html.Hr(),
             dcc.Graph(id='graph-6', style={'maxWidth': '900px', 'margin': '0 auto'}),
         ], style={'width': '38%','verticalAlign': 'top',  'display': 'inline-block', 'border': '2px solid #ccc', 'padding': '15px', 'border-radius': '10px',
         'margin-bottom': '20px', 'background-color': '#f9f9f9','margin': '0 auto', 
@@ -557,13 +635,15 @@ app.layout = html.Div([
         html.Div([
             # Left Section: Contact Information and References
             html.Div([
-                html.P("Footnotes:", style={'marginTop': '10px', 'fontSize': '14px', 'fontWeight': 'bold'}),
+                #html.P("Footnotes:", style={'marginTop': '10px', 'fontSize': '14px', 'fontWeight': 'bold'}),
                 html.P([
-                    "Scenarios according to the ", html.Br(),
+                    "Scenarios according to the: ", html.Br(),
                     "Federal Office of Meteorology and Climatology MeteoSwiss", html.Br(),
+                    "-----------------------------------", html.Br(),
                     "TAir = Outdoor temperature", html.Br(),
-                    "MAT = Moving Average temperature (98h)", html.Br(),
-                    "DAT = Daily Average temperature"
+                    "MAT = Moving Average temperature (96h)", html.Br(),
+                    "DAT = Daily Average temperature", html.Br(),
+                    "4D-MAT = Moving Average temperature (4D)"
                 ], style={'fontSize': '14px'})
             ], style={'width': '30%', 'textAlign': 'left'}),
 
@@ -622,7 +702,8 @@ app.layout = html.Div([
     ],
     [
         Input('scenario-selector', 'value'),
-        Input('station-selector', 'value')
+        Input('station-selector', 'value'),
+        Input('temperature-plot-type', 'value')
     ]
 )
 
@@ -630,42 +711,100 @@ app.layout = html.Div([
 #### Functions for   #####
 ######################    
 
-def update_weather_file(scenario, station):
+def update_weather_file(scenario, station, plot_type):
     if not scenario or not station:
-        return "No valid selection", px.scatter(), px.scatter(), px.scatter(),"", [], [], [], [], px.scatter(), px.scatter(), px.scatter(), px.scatter(), px.scatter()
+        return (
+            "No valid selection", 
+            px.scatter(title="Invalid Input"),
+            px.scatter(title="Invalid Input"),
+            px.scatter(title="Invalid Input"),
+            "", [], [], [], [],
+            px.scatter(title="Invalid Input"), 
+            px.scatter(title="Invalid Input"),
+            px.scatter(title="Invalid Input"),
+            px.scatter(title="Invalid Input"), 
+            px.scatter(title="Invalid Input")
+        )
     
     prn_filename = f"{station}_{scenario}.prn"
     prn_filepath = os.path.join(weather_files_path, prn_filename)
     
     if os.path.exists(prn_filepath):
-        df = pd.read_csv(prn_filepath, na_values=[''], sep = '\t')
-        df = preprocess_df(df)
+        try:
+            df = pd.read_csv(prn_filepath, na_values=[''], sep = '\t')
+            df = preprocess_df(df)
 
-        temp_fig = plot_temperature(df)
-        wind_fig = plot_wind(df)
-        rad_fig = plot_radiation(df)
 
-        hum_fig = plot_hum(df) 
-    
-        yearly_summary, monthly_summary = generate_summary(df)
 
-        analysis_tab = generate_analysis(df)#.T  # Transpose the table
-        analysis_tab.columns = analysis_tab.columns.astype(str)
+            # Generate plots
+            temp_fig = plot_temperature(df, plot_type)
+            wind_fig = plot_wind(df)
+            rad_fig = plot_radiation(df)
+            hum_fig = plot_hum(df) 
 
-        fig_jan, fig_jun, fig_aug, fig_oct = plot_monthly_TAir(df, analysis_tab)
+            # Generate summaries
+            yearly_summary, monthly_summary = generate_summary(df)
+            analysis_tab = generate_analysis(df)
+            analysis_tab.columns = analysis_tab.columns.astype(str)
 
-        selected_file_text = f"Selected Weather File: \n{station} - {scenario}"
-        summary_text = f"Max Temp: {yearly_summary['Max Value']}°C at {yearly_summary['Max Time']}\nMin Temp: {yearly_summary['Min Value']}°C  at {yearly_summary['Min Time']}"
-        
-        columns = [{'name': col, 'id': col} for col in monthly_summary.columns]
-        columns_a = [{'name': col, 'id': col} for col in analysis_tab.columns]
+            # Monthly temperature plots
+            fig_jan, fig_jun, fig_aug, fig_oct = plot_monthly_TAir(df, analysis_tab)
 
-        return selected_file_text, temp_fig, wind_fig, rad_fig, summary_text, monthly_summary.to_dict('records'), columns, analysis_tab.to_dict('records'), columns_a, hum_fig, fig_jan, fig_jun, fig_aug, fig_oct
+            # Summary and analysis text
+            selected_file_text = f"Selected Weather File: \n{station} - {scenario}"
+            summary_text = f"Max Temp: {yearly_summary['Max Value']}°C at {yearly_summary['Max Time']}\nMin Temp: {yearly_summary['Min Value']}°C at {yearly_summary['Min Time']}"
 
+            # Convert summaries and analysis to a dictionary format
+            columns = [{'name': col, 'id': col} for col in monthly_summary.columns]
+            columns_a = [{'name': col, 'id': col} for col in analysis_tab.columns]
+
+            return (
+                selected_file_text, 
+                temp_fig, 
+                wind_fig, 
+                rad_fig, 
+                summary_text, 
+                monthly_summary.to_dict('records'), 
+                columns, 
+                analysis_tab.to_dict('records'), 
+                columns_a, 
+                hum_fig, 
+                fig_jan, 
+                fig_jun, 
+                fig_aug, 
+                fig_oct
+            )
+
+        except Exception as e:
+            # If there is any error while reading or processing, return an error message
+            return (
+                f"Error processing {prn_filename}: {str(e)}", 
+                px.scatter(title="Error"),
+                px.scatter(title="Error"),
+                px.scatter(title="Error"),
+                "", [], [], [], [],
+                px.scatter(title="Error"), 
+                px.scatter(title="Error"),
+                px.scatter(title="Error"),
+                px.scatter(title="Error"), 
+                px.scatter(title="Error")
+            )
     else:
-        return f"Weather file {prn_filename} not found", px.scatter(), px.scatter(), px.scatter(),"", [], [], [], [], px.scatter(), px.scatter(), px.scatter(), px.scatter(), px.scatter()
+        return (
+            f"Weather file {prn_filename} not found", 
+            px.scatter(title="File Not Found"),
+            px.scatter(title="File Not Found"),
+            px.scatter(title="File Not Found"),
+            "", [], [], [], [],
+            px.scatter(title="File Not Found"), 
+            px.scatter(title="File Not Found"),
+            px.scatter(title="File Not Found"),
+            px.scatter(title="File Not Found"), 
+            px.scatter(title="File Not Found")
+        )
+
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+        app.run_server(debug=True)
 
     
