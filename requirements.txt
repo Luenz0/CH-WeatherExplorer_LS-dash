@@ -5,4 +5,5 @@ gunicorn
 dash-tools
 numpy
 datetime
-docopt==0.6.2
+pip>=25.0.1
+setuptools>=68.0.0
