@@ -861,6 +861,8 @@ def update_weather_file(scenario, station, plot_type):
 
 
 if __name__ == '__main__':
-        app.run_server(debug=True)
+        #app.run_server(debug=True)
+        port = int(os.environ.get("PORT", 8050))  # Default to 8050 for local testing
+        app.run_server(host="0.0.0.0", port=port)
 
     
