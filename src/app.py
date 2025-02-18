@@ -22,6 +22,7 @@ from dash.dependencies import Input, Output, State
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import flask
 
 ######################
 #### FILE IMPORT #####
@@ -455,9 +456,15 @@ def plot_monthly_TAir(df, summary):
 #### DASH SET UP   #####
 ######################
 
-# Dash app setup
-app = Dash(__name__)
-server = app.server
+# # Dash app setup
+# app = Dash(__name__)
+# server = app.server
+
+# Create Flask server
+server = flask.Flask(__name__)
+
+# Attach Dash to Flask
+app = Dash(__name__, server=server)
 
 app.layout = html.Div([
     
@@ -875,4 +882,4 @@ if __name__ == '__main__':
 
     # 🔹 Start Dash Server
     port = 8080  # Default to 8080 for deployment
-    app.run_server(debug=True)#host="0.0.0.0", port=port, debug=True)
+    app.run_server(host="0.0.0.0", port=port, debug=True)
