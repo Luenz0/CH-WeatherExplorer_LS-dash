@@ -1,7 +1,6 @@
 pip>=25.0.1
 setuptools>=68.0.0
 wheel
-dash==2.6.0
 pandas
 plotly
 gunicorn
