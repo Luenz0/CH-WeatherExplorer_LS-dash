@@ -39,51 +39,34 @@ weather_files_path = os.path.join(ROOT_DIR, "Weather_files")
 scenarios_file = os.path.join(documents_path, "Scenarios_CH.csv")
 stations_file = os.path.join(documents_path, "Stations_CH.csv")
 
+Scenarios = None
+Stations = None
+station_options = []
+scenario_options = []
 
+# # Load CSV files into DataFrames
+# Scenarios = pd.read_csv(scenarios_file) if os.path.exists(scenarios_file) else None
+# Stations = pd.read_csv(stations_file) if os.path.exists(stations_file) else None
 
-# Load CSV files into DataFrames
-Scenarios = pd.read_csv(scenarios_file) if os.path.exists(scenarios_file) else None
-Stations = pd.read_csv(stations_file) if os.path.exists(stations_file) else None
+# # Prepare dropdown options
+# station_options = [{"label": label, "value": value} for value, label in zip(Stations.iloc[:, 0], Stations.iloc[:, 1])] if Stations is not None else []
+# scenario_options = [{"label": s, "value": s} for s in Scenarios.iloc[:, 0]] if Scenarios is not None else []
 
-# Prepare dropdown options
+######################
+#### LOAD DATA ONCE ####
+######################
+
+if os.path.exists(stations_file):
+    Stations = pd.read_csv(stations_file)
+if os.path.exists(scenarios_file):
+    Scenarios = pd.read_csv(scenarios_file)
+
+# Preload dropdown options
 station_options = [{"label": label, "value": value} for value, label in zip(Stations.iloc[:, 0], Stations.iloc[:, 1])] if Stations is not None else []
 scenario_options = [{"label": s, "value": s} for s in Scenarios.iloc[:, 0]] if Scenarios is not None else []
 
 
-# Check if DataFrames were loaded successfully
-#if Scenarios is None:
-    #print("Warning: Scenarios_CH.csv not found in Documents folder.")
-#if Stations is None:
-    #print("Warning: Stations_CH.csv not found in Documents folder.")
 
-# Display first few rows of each DataFrame if loaded successfully
-#if Scenarios is not None:
-    #print("Scenarios DataFrame loaded successfully:")
-    #print(Scenarios.head())
-#if Stations is not None:
-    #print("Stations DataFrame loaded successfully:")
-    #print(Stations.head(5))
-
-# if Scenarios is not None and Stations is not None:
-#     found_files = []
-#     missing_files = []
-    
-#     for station in Stations.iloc[:, 0]:
-#         for scenario in Scenarios.iloc[:, 0]:
-#             prn_filename = f"{station}_{scenario}.prn"
-#             prn_filepath = os.path.join(weather_files_path, prn_filename)
-#             if os.path.exists(prn_filepath):
-#                 found_files.append(prn_filename)
-#             else:
-#                 missing_files.append(prn_filename)
-    
-    #print("Summary of .prn file search:")
-    #print(f"Found {len(found_files)} .prn files:")
-    #for file in found_files:
-        #print(f"  - {file}")
-    #print(f"Missing {len(missing_files)} .prn files:")
-    #for file in missing_files:
-        #print(f"  - {file}")
 
 ######################
 #### Functions   #####
@@ -488,10 +471,10 @@ app.layout = html.Div([
         # First Section / input and tables
         html.Div([
             html.H2("Weather File", style={'textAlign': 'center', 'margin-bottom': '10px'}),html.Hr(),
-            
+            dcc.Store(id="stored-options", data={"stations": station_options, "scenarios": scenario_options}),
             # Dropdown menu
             html.Label("Station:"),
-            dcc.Dropdown(id="station-selector", options=station_options, placeholder="Select a Station"),
+            dcc.Dropdown(id="station-selector", options=[], placeholder="Select a Station"),
             # dcc.Dropdown(
             #     id='station-selector',
             #     #options=[{'label': row[1], 'value': row[0]} for _, row in Stations.iterrows()] if Stations is not None else [],
@@ -502,7 +485,7 @@ app.layout = html.Div([
 
             # Check box / Radio items
             html.Label("Scenario:"),
-            dcc.RadioItems(id="scenario-selector", options=scenario_options,  style={
+            dcc.RadioItems(id="scenario-selector",  options=[],  style={
                          'display': 'flex',
                          'flexDirection': 'column',  # Stacks radio items vertically
                          'gap': '10px'  # Adds space between each radio item
@@ -734,6 +717,25 @@ app.layout = html.Div([
 ])
 
 
+
+######################
+#### CALLBACKS   #####
+######################  
+
+
+#  Load Dropdown Options at Startup
+@app.callback(
+    [Output("station-selector", "options"), Output("scenario-selector", "options")],
+    Input("stored-options", "data")
+)
+def load_dropdown_options(stored_data):
+    return stored_data["stations"], stored_data["scenarios"]
+
+
+
+
+
+#  Main Weather File Processing Callback
 @app.callback(
     [
         Output('selected-file', 'children'),
@@ -759,10 +761,6 @@ app.layout = html.Div([
         State('temperature-plot-type', 'value')
     ]
 )
-
-######################
-#### Functions for   #####
-######################  
 def update_weather_callback(n_clicks, scenario, station, plot_type):
     if n_clicks == 0:
         #raise dash.exceptions.PreventUpdate  # Prevent update until button is pressed
@@ -877,4 +875,4 @@ if __name__ == '__main__':
 
     # 🔹 Start Dash Server
     port = 8080  # Default to 8080 for deployment
-    app.run_server(host="0.0.0.0", port=port, debug=True)
+    app.run_server(debug=True)#host="0.0.0.0", port=port, debug=True)
