@@ -876,5 +876,5 @@ def update_weather_file(scenario, station, plot_type):
 if __name__ == '__main__':
 
     # 🔹 Start Dash Server
-    #port = 8080  # Default to 8080 for deployment
+    port = 8080  # Default to 8080 for deployment
     app.run_server(host="0.0.0.0", port=port, debug=True)
