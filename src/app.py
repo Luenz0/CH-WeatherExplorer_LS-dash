@@ -877,4 +877,4 @@ if __name__ == '__main__':
 
     # 🔹 Start Dash Server
     #port = 8080  # Default to 8080 for deployment
-    app.run_server(debug = True)#host="0.0.0.0", port=port, debug=True)
+    app.run_server(host="0.0.0.0", port=port, debug=True)
