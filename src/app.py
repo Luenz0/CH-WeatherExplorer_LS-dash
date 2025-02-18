@@ -34,7 +34,7 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 # Define Documents path
 documents_path = os.path.join(ROOT_DIR, "Documents")
 # Define Weather_files path
-weather_files_path = os.path.join(ROOT_DIR, "Weather_files")
+weather_files_path = os.path.join(ROOT_DIR, "Weather_Files")
 
 # Define file paths
 scenarios_file = os.path.join(documents_path, "Scenarios_CH.csv")
