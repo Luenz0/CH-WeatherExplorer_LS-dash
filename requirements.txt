@@ -8,3 +8,5 @@ gunicorn
 dash-tools
 numpy
 datetime
+Flask==2.2.5
+dash==2.14.2
